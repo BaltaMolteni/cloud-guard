@@ -1,0 +1,4 @@
+# Los scripts de bash fallan con fin de línea CRLF: se fuerzan a LF también en Windows.
+*.sh text eol=lf
+hooks/pre-commit text eol=lf
+config.env text eol=lf
