@@ -1,0 +1,13 @@
+id,nombre,apellido,dni,email,telefono,tarjeta,vencimiento,cvv
+1,Lucía,Fernández,30111222,lucia.fernandez@ejemplo.com,+54 221 400-0001,4111111111111111,08/28,123
+2,Martín,Gómez,28333444,martin.gomez@ejemplo.com,+54 221 400-0002,5555555555554444,11/27,456
+3,Sofía,Rodríguez,35555666,sofia.rodriguez@ejemplo.com,+54 221 400-0003,4012888888881881,02/29,789
+4,Tomás,López,32777888,tomas.lopez@ejemplo.com,+54 221 400-0004,5105105105105100,05/28,321
+5,Valentina,Martínez,40999000,valentina.martinez@ejemplo.com,+54 221 400-0005,4111111111111111,09/27,654
+6,Joaquín,García,27123123,joaquin.garcia@ejemplo.com,+54 221 400-0006,5555555555554444,12/28,987
+7,Camila,Pérez,38456456,camila.perez@ejemplo.com,+54 221 400-0007,4012888888881881,03/30,147
+8,Facundo,Sánchez,33789789,facundo.sanchez@ejemplo.com,+54 221 400-0008,5105105105105100,07/27,258
+9,Julieta,Romero,41321321,julieta.romero@ejemplo.com,+54 221 400-0009,4111111111111111,10/29,369
+10,Nicolás,Díaz,29654654,nicolas.diaz@ejemplo.com,+54 221 400-0010,5555555555554444,01/28,741
+11,Agustina,Álvarez,36987987,agustina.alvarez@ejemplo.com,+54 221 400-0011,4012888888881881,06/29,852
+12,Ignacio,Torres,31246813,ignacio.torres@ejemplo.com,+54 221 400-0012,5105105105105100,04/28,963

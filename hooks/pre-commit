@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rechaza cualquier commit cuyo contenido en stage tenga una credencial.
+# Instalar en un repo con: cp hooks/pre-commit <repo>/.git/hooks/pre-commit
+if command -v gitleaks >/dev/null 2>&1; then
+  exec gitleaks git --pre-commit --staged --redact -v
+fi
+
+# Sin gitleaks instalado: la misma verificación con la imagen de Docker.
+exec env MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/repo" \
+  zricethezav/gitleaks:v8.21.2 git --pre-commit --staged --redact -v /repo
