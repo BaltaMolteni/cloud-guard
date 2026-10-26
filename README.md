@@ -22,11 +22,13 @@ Dura unos cinco minutos. Todo corre desde scripts para que nadie tenga que tipea
 cloud-guard/
 ├── config.env               # modo (floci/aws), bucket, región, perfil de AWS, pausas
 ├── demo/
-│   ├── setup.sh             # prepara la cuenta (se corre antes de la presentación)
-│   ├── acto1.sh             # el bucket público
-│   ├── acto2.sh             # la credencial filtrada
+│   ├── setup.sh             # prepara la cuenta y el repo con la clave filtrada (antes de presentar)
+│   ├── terminal.sh          # prepara las terminales de admin y atacante para la demo a mano
+│   ├── acto1.sh             # el bucket público, automático (plan B)
+│   ├── acto2.sh             # la credencial filtrada, automático (plan B)
 │   ├── limpiar.sh           # borra todo al terminar
 │   └── lib.sh               # funciones comunes
+├── docs/guion-en-vivo.md    # los comandos para presentar a mano, paso a paso
 ├── politicas/               # las políticas IAM y de bucket que se aplican y se muestran
 ├── datos/clientes_ficticios.csv
 ├── app-g10/app.py           # la "aplicación" que termina con la clave en config.py
@@ -60,15 +62,30 @@ aws configure --profile g10-demo   # solo para MODO=aws
 ## Uso
 
 ```bash
-# Antes de la presentación: levanta Floci, crea el bucket, el usuario, la clave y el rol,
-# y descarga las imágenes de Docker para que no demoren en vivo.
+# Antes de la presentación: levanta Floci; crea el bucket, el usuario, la clave y el rol;
+# arma el repo de la app con la clave en el historial; y descarga las imágenes de Docker.
 ./demo/setup.sh
+```
 
-# En vivo: cada script se detiene entre pasos hasta que se presiona Enter
+**En vivo, a mano (recomendado):** dos terminales, una de admin y otra de atacante, donde se escriben los comandos reales de `aws`, `git`, `gitleaks` y `prowler`. Los pasos están en [docs/guion-en-vivo.md](docs/guion-en-vivo.md).
+
+```bash
+source demo/terminal.sh admin       # en una ventana
+source demo/terminal.sh atacante    # en otra
+```
+
+Qué configura cada una (credenciales, endpoint, carpeta) está en [Qué hace `terminal.sh`](docs/guion-en-vivo.md#qué-hace-terminalsh).
+
+**En vivo, automático (plan B):** cada script se detiene entre pasos hasta que se presiona Enter.
+
+```bash
 ./demo/acto1.sh
 ./demo/acto2.sh
+```
 
-# Al terminar
+Al terminar:
+
+```bash
 ./demo/limpiar.sh
 ```
 
@@ -118,11 +135,11 @@ Probado con Floci 2.3.0, Prowler 5.45 y gitleaks 8.21.2.
 | Paso | Qué pasa en pantalla | Qué decimos |
 |---|---|---|
 | 0 | El bucket ya es privado (403). | Cerramos el bucket. ¿Alcanza? |
-| 1. Romper | La clave de `g10-app` queda en `config.py` y se commitea. El usuario tiene `s3:*` sobre `*`. | Es lo mismo que hizo Uber en 2016. Permisos de más "para que funcione". |
-| 2. Daño | Desde otra carpeta, con nada más que el repo clonado y sin credenciales propias, se descarga el CSV privado. | La identidad reemplaza al perímetro: quien tiene la clave entra desde cualquier lugar. |
-| 3. Detectar | gitleaks encuentra dos hallazgos en el historial: el ID `AKIA…` y la clave secreta. | Es la capa 5 (DevSecOps). |
-| 4a. Corregir | Se desactiva la clave y la misma descarga falla con `InvalidAccessKeyId`. | Borrar `config.py` no alcanza: la clave sigue en el historial. Hay que revocarla. |
-| 4b. Prevenir | Se instala el hook pre-commit. Un commit nuevo con una clave se rechaza (código de salida 1). | El error no llega al repositorio. |
+| 1. Romper (ya pasó) | Hace tres semanas, la clave de `g10-app` se commiteó en `config.py`. Al día siguiente se "sacó" del código. El usuario tiene `s3:*` sobre `*`. | Es lo mismo que hizo Uber en 2016. Permisos de más "para que funcione". |
+| 2. Daño | Sin credenciales propias, el atacante clona el repo, encuentra la clave en el historial (`git log -p`) y descarga el CSV privado. | La identidad reemplaza al perímetro: quien tiene la clave entra desde cualquier lugar. |
+| 3. Detectar | gitleaks encuentra la clave en el historial, con el commit, el autor y la fecha. Según los caracteres de la clave secreta, puede aparecer un segundo hallazgo. | Es la capa 5 (DevSecOps). |
+| 4a. Corregir | Se desactiva la clave y la misma descarga falla con 403. | Sacar la clave del código no alcanzó: seguía en el historial. Hay que revocarla. |
+| 4b. Prevenir | Se instala el hook pre-commit. Alguien vuelve a la configuración anterior, que tiene la clave escrita, y el commit se rechaza (código de salida 1). | El error no llega al repositorio. |
 | 4c. Mínimo privilegio | La app asume el rol `g10-app-lectura`, que tiene credenciales temporales y solo `s3:GetObject`. Lee su archivo, pero `s3 ls` y `s3 rm` dan AccessDenied. | Es la capa 0. Si estas credenciales se filtran, vencen en una hora y no sirven para nada más. Le habría puesto un límite a Capital One. |
 
 ## Plan B

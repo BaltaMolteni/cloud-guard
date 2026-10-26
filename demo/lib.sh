@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Funciones comunes de la demo. Cada script la incluye con: source "$(dirname "$0")/lib.sh"
-set -euo pipefail
+# En una terminal interactiva (terminal.sh) un error no tiene que cerrar la ventana.
+[[ $- == *i* ]] || set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
@@ -30,7 +31,8 @@ case "$MODO" in
     URL_PUBLICA="https://$BUCKET.s3.$REGION.amazonaws.com/$ARCHIVO"
     ;;
   *)
-    printf 'MODO debe ser floci o aws (es "%s")\n' "$MODO"; exit 1 ;;
+    printf 'MODO debe ser floci o aws (es "%s")\n' "$MODO"
+    return 1 2>/dev/null || exit 1 ;;
 esac
 
 titulo() { printf '\n\033[1;36m══════ %s ══════\033[0m\n' "$*"; }
@@ -38,7 +40,11 @@ paso()   { printf '\n\033[1;33m▶ %s\033[0m\n' "$*"; }
 info()   { printf '  %s\n' "$*"; }
 ok()     { printf '\033[1;32m✔ %s\033[0m\n' "$*"; }
 mal()    { printf '\033[1;31m✘ %s\033[0m\n' "$*"; }
-cmd()    { printf '\033[0;90m$ %s\033[0m\n' "$*" >&2; }
+# En la terminal interactiva (terminal.sh) el comando ya lo escribió el presentador: no se repite.
+cmd() {
+  [ "${MOSTRAR_COMANDOS:-1}" = 1 ] || return 0
+  printf '\033[0;90m$ %s\033[0m\n' "$*" >&2
+}
 run() {
   local mostrar=() a
   for a in "$@"; do
@@ -152,10 +158,11 @@ esperar_http() {
   info "HTTP $codigo"
 }
 
+# type -P busca solo programas instalados: terminal.sh define funciones con el mismo nombre.
 gitleaks_en() {
   local repo="$1"; shift
   cmd "gitleaks $* ."
-  if command -v gitleaks >/dev/null; then
+  if type -P gitleaks >/dev/null; then
     (cd "$repo" && gitleaks "$@" .)
   else
     MSYS_NO_PATHCONV=1 docker run --rm -v "$(winpath "$(cd "$repo" && pwd)"):/repo" \
@@ -165,8 +172,10 @@ gitleaks_en() {
 
 prowler_aws() {
   cmd "prowler aws $*"
-  if command -v prowler >/dev/null; then
-    prowler aws "$@" -o "$WORK/prowler"
+  # El reporte (HTML, CSV y JSON) queda en .work/prowler para abrirlo en el navegador.
+  mkdir -p "$RAIZ/$WORK/prowler"
+  if type -P prowler >/dev/null; then
+    prowler aws "$@" -o "$RAIZ/$WORK/prowler"
   else
     # El contenedor no ve ~/.aws: se le pasan las credenciales del perfil actual por entorno.
     # Con Floci, "localhost" dentro del contenedor es el propio contenedor: se apunta al host.
@@ -178,6 +187,7 @@ prowler_aws() {
       fi
       MSYS_NO_PATHCONV=1 docker run --rm --add-host=host.docker.internal:host-gateway \
         -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION \
+        -v "$(winpath "$RAIZ/$WORK/prowler"):/home/prowler/output" \
         "${endpoint[@]}" "$PROWLER_IMAGE" aws "$@"
     )
   fi

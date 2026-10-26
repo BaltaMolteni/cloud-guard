@@ -6,5 +6,10 @@ if command -v gitleaks >/dev/null 2>&1; then
 fi
 
 # Sin gitleaks instalado: la misma verificación con la imagen de Docker.
-exec env MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/repo" \
+# "git commit -a" prepara un índice temporal y lo indica en GIT_INDEX_FILE: el contenedor tiene que usar ese.
+indice=""
+if [ -n "$GIT_INDEX_FILE" ]; then
+  indice="GIT_INDEX_FILE=/repo/.git/$(basename "$GIT_INDEX_FILE")"
+fi
+exec env MSYS_NO_PATHCONV=1 docker run --rm ${indice:+-e "$indice"} -v "$(pwd -W 2>/dev/null || pwd):/repo" \
   zricethezav/gitleaks:v8.21.2 git --pre-commit --staged --redact -v /repo

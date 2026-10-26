@@ -1,4 +1,4 @@
-id,nombre,apellido,dni,email,telefono,tarjeta,vencimiento,cvv
+﻿id,nombre,apellido,dni,email,telefono,tarjeta,vencimiento,cvv
 1,Lucía,Fernández,30111222,lucia.fernandez@ejemplo.com,+54 221 400-0001,4111111111111111,08/28,123
 2,Martín,Gómez,28333444,martin.gomez@ejemplo.com,+54 221 400-0002,5555555555554444,11/27,456
 3,Sofía,Rodríguez,35555666,sofia.rodriguez@ejemplo.com,+54 221 400-0003,4012888888881881,02/29,789

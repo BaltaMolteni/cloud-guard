@@ -8,9 +8,10 @@ source "$WORK/clave-g10-app.env"
 
 APP="$WORK/app-g10"
 ATACANTE="$WORK/atacante"
+[ -d "$APP/.git" ] || { mal "Falta el repo de la app: correr ./demo/setup.sh"; exit 1; }
 
-# Muestra un archivo con las claves recortadas: la pantalla se proyecta.
-mostrar_tapado() { cmd "cat $1"; sed -E 's/(= "[A-Za-z0-9]{4})[^"]*"/\1••••••••"/' "$1"; }
+# Tapa las claves en pantalla: la pantalla se proyecta.
+tapar() { sed -E 's/(= "[^"]{4})[^"]*"/\1••••••••"/'; }
 
 titulo "Acto 2: la credencial filtrada"
 
@@ -18,50 +19,37 @@ paso "0. Punto de partida: el bucket ya es privado"
 esperar_http 403
 pausa
 
-paso "1. Romper: la clave de $USUARIO_APP queda escrita en config.py y se commitea"
-rm -rf "$APP"
-cp -r app-g10 "$APP"
-git -C "$APP" init -q
-git -C "$APP" config user.name "Dev G10"
-git -C "$APP" config user.email "dev@ejemplo.com"
-git -C "$APP" config core.autocrlf false
-git -C "$APP" add app.py
-git -C "$APP" commit -q -m "Primera versión de la app"
-cat > "$APP/config.py" <<EOF
-# Configuración de la aplicación
-AWS_REGION = "$REGION"
-BUCKET = "$BUCKET"
-AWS_ACCESS_KEY_ID = "$ID"
-AWS_SECRET_ACCESS_KEY = "$SECRETO"
-EOF
-mostrar_tapado "$APP/config.py"
-run git -C "$APP" add config.py
-run git -C "$APP" commit -q -m "Agrega configuración de AWS"
+paso "1. Romper (ya pasó): hace tres semanas la clave de $USUARIO_APP se commiteó en config.py"
+run git -C "$APP" log --oneline
+info "Al día siguiente se \"sacó\" del código:"
+run cat "$APP/config.py"
 info "Y el usuario tiene permisos de más:"
 run cat politicas/g10-app-s3-todo.json
 pausa
 
-paso "2. Mostrar el daño: alguien con nada más que el repositorio clonado"
+paso "2. Mostrar el daño: alguien con acceso de lectura al repositorio"
 rm -rf "$ATACANTE" "$WORK/botin"
 mkdir -p "$WORK/botin"
-run git clone -q "$APP" "$ATACANTE"
+run git clone -q "$WORK/remoto/app-g10.git" "$ATACANTE"
 (
   # La terminal del atacante: sin perfiles ni credenciales propias, solo lo que hay en el repo.
   unset AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   export AWS_SHARED_CREDENTIALS_FILE="$WORK/sin-credenciales" AWS_CONFIG_FILE="$WORK/sin-credenciales"
-  cmd "grep AWS_ $ATACANTE/config.py"
-  grep AWS_ "$ATACANTE/config.py" | sed -E 's/(= "[A-Za-z0-9]{4})[^"]*"/\1••••••••"/'
-  export AWS_ACCESS_KEY_ID="$(sed -n 's/^AWS_ACCESS_KEY_ID = "\(.*\)"/\1/p' "$ATACANTE/config.py")"
-  export AWS_SECRET_ACCESS_KEY="$(sed -n 's/^AWS_SECRET_ACCESS_KEY = "\(.*\)"/\1/p' "$ATACANTE/config.py")"
+  cmd "git -C $ATACANTE log -p | grep AWS_"
+  git -C "$ATACANTE" log -p | grep -E '^[-+]AWS_(ACCESS|SECRET)' | tapar
+  viejo="$(git -C "$ATACANTE" show HEAD~1:config.py)"
+  export AWS_ACCESS_KEY_ID="$(sed -n 's/^AWS_ACCESS_KEY_ID = "\(.*\)"/\1/p' <<< "$viejo")"
+  export AWS_SECRET_ACCESS_KEY="$(sed -n 's/^AWS_SECRET_ACCESS_KEY = "\(.*\)"/\1/p' <<< "$viejo")"
   cmd "export AWS_ACCESS_KEY_ID=<id> AWS_SECRET_ACCESS_KEY=<secreto>"
   run aws sts get-caller-identity
+  run aws s3 ls
   run aws s3 cp --no-progress "s3://$BUCKET/$ARCHIVO" "$WORK/botin/"
   run head -6 "$WORK/botin/$ARCHIVO"
 )
 pausa
 
 paso "3. Detectar: gitleaks encuentra la clave en el historial del repositorio"
-gitleaks_en "$ATACANTE" git -v --redact || true
+gitleaks_en "$APP" git -v --redact || true
 pausa
 
 paso "4a. Corregir: se desactiva la clave filtrada"
@@ -82,25 +70,21 @@ info "El atacante repite la misma descarga:"
   done
   mal "La clave sigue funcionando: repetir en unos segundos"
 )
-info "Borrar config.py del repo no alcanza: la clave sigue en el historial. Lo que la anula es desactivarla."
+info "Sacar la clave del código no alcanzó: seguía en el historial. Lo que la anula es desactivarla."
 pausa
 
 paso "4b. Prevenir: hook pre-commit con gitleaks"
 run cp hooks/pre-commit "$APP/.git/hooks/pre-commit"
 chmod +x "$APP/.git/hooks/pre-commit"
-# Clave falsa con el formato de AWS (no la de ejemplo de la documentación, que gitleaks ignora).
-alfabeto=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567
-falsa=AKIA
-for _ in $(seq 1 16); do falsa+="${alfabeto:RANDOM%32:1}"; done
-printf 'AWS_ACCESS_KEY_ID = "%s"\n' "$falsa" > "$APP/config_nueva.py"
-run git -C "$APP" add config_nueva.py
-if run git -C "$APP" commit -m "Otra clave"; then
+info "Alguien vuelve a la configuración anterior, con la clave escrita:"
+cmd "git -C $APP show HEAD~1:config.py > $APP/config.py"
+git -C "$APP" show HEAD~1:config.py > "$APP/config.py"
+if run git -C "$APP" commit -am "Vuelvo a la config anterior"; then
   mal "El commit pasó: revisar el hook"
 else
   ok "Commit rechazado por el hook (código de salida $?)"
 fi
-git -C "$APP" reset -q config_nueva.py
-rm -f "$APP/config_nueva.py"
+git -C "$APP" checkout -q config.py
 pausa
 
 paso "4c. Mínimo privilegio: la app pasa a usar el rol $ROL_LECTURA"

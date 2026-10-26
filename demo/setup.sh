@@ -51,7 +51,9 @@ fi
 run aws s3api put-public-access-block --bucket "$BUCKET" \
   --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 aws s3api delete-bucket-policy --bucket "$BUCKET" 2>/dev/null || true
-run aws s3 cp --no-progress "datos/$ARCHIVO" "s3://$BUCKET/$ARCHIVO"
+# Sin tipo explícito, la CLI en Windows lo sube como application/vnd.ms-excel sin codificación:
+# el navegador lo descarga y las tildes se ven mal. Como texto UTF-8 se muestra en la misma pestaña.
+run aws s3 cp --no-progress --content-type "text/plain; charset=utf-8" "datos/$ARCHIVO" "s3://$BUCKET/$ARCHIVO"
 
 paso "Usuario $USUARIO_APP con s3:* sobre todos los recursos"
 aws iam get-user --user-name "$USUARIO_APP" >/dev/null 2>&1 || run aws iam create-user --user-name "$USUARIO_APP" >/dev/null
@@ -84,5 +86,44 @@ if [ "$MODO" = aws ]; then
   paso "Esperando que IAM propague la clave y el rol"
   sleep 15
 fi
-rm -rf "$WORK/app-g10" "$WORK/atacante" "$WORK/botin"
-ok "Listo. Siguiente: ./demo/acto1.sh"
+paso "Repositorio de la app: la clave se commiteó hace semanas y después se \"sacó\" del código"
+APP="$WORK/app-g10"
+rm -rf "$APP" "$WORK/remoto" "$WORK/atacante" "$WORK/atacante-home" "$WORK/botin" "$WORK/prowler"
+cp -r app-g10 "$APP"
+git -C "$APP" init -q -b main
+git -C "$APP" config user.name "Dev G10"
+git -C "$APP" config user.email "dev@ejemplo.com"
+git -C "$APP" config core.autocrlf false
+commit_hace() { # $1 días atrás, $2 mensaje
+  local fecha
+  fecha="$(date -R -d "-$1 days")"
+  GIT_AUTHOR_DATE="$fecha" GIT_COMMITTER_DATE="$fecha" git -C "$APP" commit -q -m "$2"
+}
+git -C "$APP" add app.py
+commit_hace 30 "Primera versión de la app"
+cat > "$APP/config.py" <<EOF
+# Configuración de la aplicación
+AWS_REGION = "$REGION"
+BUCKET = "$BUCKET"
+AWS_ACCESS_KEY_ID = "$ID"
+AWS_SECRET_ACCESS_KEY = "$SECRETO"
+EOF
+git -C "$APP" add config.py
+commit_hace 21 "Agrega configuración de AWS"
+cat > "$APP/config.py" <<EOF
+# Configuración de la aplicación: las credenciales se leen del entorno
+import os
+
+AWS_REGION = "$REGION"
+BUCKET = "$BUCKET"
+AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
+EOF
+git -C "$APP" add config.py
+commit_hace 20 "Saca las claves del código"
+# El "GitHub" de la empresa: un repositorio remoto del que cualquiera con acceso puede clonar.
+git clone -q --bare "$APP" "$WORK/remoto/app-g10.git"
+git -C "$APP" remote add origin "$(cd "$WORK/remoto/app-g10.git" && pwd)"
+run git -C "$APP" log --oneline
+
+ok "Listo. En vivo: docs/guion-en-vivo.md (o los scripts ./demo/acto1.sh y ./demo/acto2.sh)"
